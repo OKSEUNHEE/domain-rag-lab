@@ -316,6 +316,28 @@
             <div class="lesson-content">
               <h2>채권은 돈을 빌려준 약속장</h2>
               <div class="lesson-body">
+                <section class="bond-price-keywords" id="bondPriceKeywordsLesson" aria-labelledby="bondPriceKeywordsHeading">
+                  <h3 id="bondPriceKeywordsHeading">채권 가격을 읽는 네 가지 키워드: 선형 · 비선형 · 듀레이션 · 컨벡시티</h3>
+                  <p><b>선형</b>은 원인이 1만큼 변할 때 결과도 일정한 비율로 변하는 관계입니다. 그래프가 곧은 직선이라 변화 폭을 빠르게 가늠하기 좋습니다. 반대로 <b>비선형</b>은 상황에 따라 반응 속도가 달라지는 관계로, 그래프가 휘어집니다. 옵션의 손익 구조나 채권 가격과 금리의 관계가 대표적인 예입니다.</p>
+                  <figure class="lesson-figure concept-graph-figure">
+                    <img src="assets/linear-nonlinear-duration-convexity.svg" alt="선형과 비선형, 듀레이션과 컨벡시티를 비교한 네 개의 개념 그래프" />
+                    <figcaption>듀레이션은 금리와 채권 가격 관계를 직선으로 간단히 본 것이고, 컨벡시티는 실제 곡선이 그 직선에서 얼마나 휘는지 보여 줍니다.</figcaption>
+                  </figure>
+                  <p><b>듀레이션</b>은 금리가 조금 변할 때 채권 가격이 얼마나 민감하게 움직이는지 알려 주는 숫자입니다. 예를 들어 수정듀레이션이 5라면, 다른 조건이 같을 때 시장금리가 <b>1%p 오르면</b> 채권 가격은 대략 <b>5% 내려가는</b> 방향으로 생각할 수 있습니다. 듀레이션이 길수록 금리 변화에 더 크게 흔들립니다.</p>
+                  <p><b>컨벡시티</b>는 이 관계가 직선이 아니라 실제로는 휘어 있다는 점을 나타냅니다. 일반적인 양(+)의 컨벡시티 채권은 금리가 내려갈 때 가격 상승폭이 듀레이션 직선 근사보다 커지고, 금리가 오를 때 가격 하락폭은 그 근사보다 작아질 수 있습니다. 따라서 듀레이션은 ‘빠른 1차 추정’, 컨벡시티는 ‘그 추정을 더 실제에 가깝게 만드는 보정’으로 기억하면 쉽습니다.</p>
+                  <div class="lesson-table-wrap">
+                    <table class="lesson-table">
+                      <caption>한 줄로 기억하기</caption>
+                      <thead><tr><th scope="col">개념</th><th scope="col">쉽게 말하면</th><th scope="col">채권에서 보는 점</th></tr></thead>
+                      <tbody>
+                        <tr><th scope="row">선형</th><td>같은 입력 변화에 같은 속도로 반응하는 직선</td><td>작은 금리 변화에서의 단순 추정</td></tr>
+                        <tr><th scope="row">비선형</th><td>입력 위치에 따라 반응 속도가 달라지는 곡선</td><td>금리와 가격의 실제 관계</td></tr>
+                        <tr><th scope="row">듀레이션</th><td>금리 변화에 대한 가격의 ‘기울기’</td><td>금리 위험의 크기를 빠르게 비교</td></tr>
+                        <tr><th scope="row">컨벡시티</th><td>그 기울기 자체가 바뀌는 ‘휘어짐’</td><td>큰 금리 변화에서 듀레이션 추정을 보정</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
                 <h3>‘채권’과 ‘채무’의 한자부터 구분하기</h3>
                 <p>
                   채권(債權)과 채무(債務)는 모두 ‘빚 채(債)’를 씁니다.
@@ -441,34 +463,6 @@
             >
               <span aria-hidden="true">⌃</span>
             </button>
-          </section>
-          <section class="lesson" id="bondPriceKeywordsLesson">
-            <span>00.01</span>
-            <div class="lesson-content">
-              <h2>채권 가격을 읽는 네 가지 키워드: 선형 · 비선형 · 듀레이션 · 컨벡시티</h2>
-              <div class="lesson-body">
-                <p><b>선형</b>은 원인이 1만큼 변할 때 결과도 일정한 비율로 변하는 관계입니다. 그래프가 곧은 직선이라 변화 폭을 빠르게 가늠하기 좋습니다. 반대로 <b>비선형</b>은 상황에 따라 반응 속도가 달라지는 관계로, 그래프가 휘어집니다. 옵션의 손익 구조나 채권 가격과 금리의 관계가 대표적인 예입니다.</p>
-                <figure class="lesson-figure concept-graph-figure">
-                  <img src="assets/linear-nonlinear-duration-convexity.svg" alt="선형과 비선형, 듀레이션과 컨벡시티를 비교한 네 개의 개념 그래프" />
-                  <figcaption>듀레이션은 금리와 채권 가격 관계를 직선으로 간단히 본 것이고, 컨벡시티는 실제 곡선이 그 직선에서 얼마나 휘는지 보여 줍니다.</figcaption>
-                </figure>
-                <p><b>듀레이션</b>은 금리가 조금 변할 때 채권 가격이 얼마나 민감하게 움직이는지 알려 주는 숫자입니다. 예를 들어 수정듀레이션이 5라면, 다른 조건이 같을 때 시장금리가 <b>1%p 오르면</b> 채권 가격은 대략 <b>5% 내려가는</b> 방향으로 생각할 수 있습니다. 듀레이션이 길수록 금리 변화에 더 크게 흔들립니다.</p>
-                <p><b>컨벡시티</b>는 이 관계가 직선이 아니라 실제로는 휘어 있다는 점을 나타냅니다. 일반적인 양(+)의 컨벡시티 채권은 금리가 내려갈 때 가격 상승폭이 듀레이션 직선 근사보다 커지고, 금리가 오를 때 가격 하락폭은 그 근사보다 작아질 수 있습니다. 따라서 듀레이션은 ‘빠른 1차 추정’, 컨벡시티는 ‘그 추정을 더 실제에 가깝게 만드는 보정’으로 기억하면 쉽습니다.</p>
-                <div class="lesson-table-wrap">
-                  <table class="lesson-table">
-                    <caption>한 줄로 기억하기</caption>
-                    <thead><tr><th scope="col">개념</th><th scope="col">쉽게 말하면</th><th scope="col">채권에서 보는 점</th></tr></thead>
-                    <tbody>
-                      <tr><th scope="row">선형</th><td>같은 입력 변화에 같은 속도로 반응하는 직선</td><td>작은 금리 변화에서의 단순 추정</td></tr>
-                      <tr><th scope="row">비선형</th><td>입력 위치에 따라 반응 속도가 달라지는 곡선</td><td>금리와 가격의 실제 관계</td></tr>
-                      <tr><th scope="row">듀레이션</th><td>금리 변화에 대한 가격의 ‘기울기’</td><td>금리 위험의 크기를 빠르게 비교</td></tr>
-                      <tr><th scope="row">컨벡시티</th><td>그 기울기 자체가 바뀌는 ‘휘어짐’</td><td>큰 금리 변화에서 듀레이션 추정을 보정</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-            <button class="lesson-toggle" type="button" data-lesson-toggle aria-expanded="true" aria-label="채권 가격을 읽는 네 가지 키워드 내용 접기" title="내용 접기"><span aria-hidden="true">⌃</span></button>
           </section>
           <section class="lesson">
             <span>00.1</span>
