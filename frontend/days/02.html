@@ -1807,16 +1807,32 @@
       <section class="glossary-modal__dialog etf-catalog-dialog" role="dialog" aria-modal="true" aria-labelledby="etfCatalogTitle">
         <button class="glossary-modal__close" type="button" aria-label="닫기" data-etf-catalog-close>×</button>
         <h2 id="etfCatalogTitle">국내 주요 운용사 전체 ETF 탐색</h2>
-        <p class="etf-catalog-intro">최근 3개월 수익률은 공개 ETF 시세 목록의 조회 값이며, 상위 편입종목·비중은 각 응답의 기준일 값입니다. 채권·원자재·파생형 ETF는 개별 주식 대신 채권·선물·현금성 자산을 담을 수 있습니다.</p>
+        <p class="etf-catalog-intro">기본으로는 공개 ETF 시세 목록의 최근 3개월 수익률을 보여주며, 상위 편입종목·비중은 각 응답의 기준일 값입니다. 채권·원자재·파생형 ETF는 개별 주식 대신 채권·선물·현금성 자산을 담을 수 있습니다. 아래 “수익률 기간”에서 1개월·6개월·1년 또는 직접 지정한 기간으로 다시 계산해 볼 수 있으며, 이 값은 매번 실시간 조회가 아니라 PostgreSQL에 저장된 최근 1년치 일별 시세를 사용합니다. 1년보다 이전 기간은 해당 ETF의 “1년 전 가져오기” 버튼을 눌러 그때 한 번 불러온 뒤 조회할 수 있습니다.</p>
         <div class="etf-catalog-controls">
           <label>브랜드<select id="etfCatalogBrand"><option value="all">전체 브랜드</option><option value="KODEX">KODEX</option><option value="TIGER">TIGER</option><option value="ACE">ACE</option><option value="RISE">RISE</option><option value="SOL">SOL</option><option value="PLUS">PLUS</option><option value="KIWOOM">KIWOOM (구 KOSEF)</option><option value="HANARO">HANARO</option></select></label>
           <label>자산군<select id="etfCatalogAsset"><option value="all">전체 자산군</option><option value="국내주식·혼합">국내주식·혼합</option><option value="해외주식">해외주식</option><option value="채권·현금성">채권·현금성</option><option value="원자재">원자재</option></select></label>
           <label class="etf-catalog-search">ETF 이름·섹터 검색<input id="etfCatalogSearch" type="search" placeholder="예: 반도체, S&P500, 채권" /></label>
         </div>
+        <div class="etf-catalog-controls etf-catalog-period-row">
+          <label>수익률 기간<select id="etfCatalogPeriodMode">
+            <option value="default">최근 3개월 (기본 제공값)</option>
+            <option value="1m">최근 1개월</option>
+            <option value="3m">최근 3개월 (직접 계산)</option>
+            <option value="6m">최근 6개월</option>
+            <option value="1y">최근 1년</option>
+            <option value="custom">기간 직접 설정</option>
+          </select></label>
+          <span class="etf-catalog-period-custom" id="etfCatalogPeriodCustom" hidden>
+            <label>시작일<input type="date" id="etfCatalogPeriodStart" /></label>
+            <label>종료일<input type="date" id="etfCatalogPeriodEnd" /></label>
+            <button type="button" id="etfCatalogPeriodApply">적용</button>
+          </span>
+          <small class="etf-catalog-period-note" id="etfCatalogPeriodNote">기본값은 목록의 저장된 3개월 수익률이라 즉시 표시됩니다. 다른 기간을 고르면 화면에 보이는 ETF만 PostgreSQL에 저장된 최근 1년치 시세로 다시 계산합니다. 1년보다 이전 시작일은 해당 ETF의 “1년 전 가져오기” 버튼을 눌러야 조회됩니다.</small>
+        </div>
         <p class="etf-catalog-status" id="etfCatalogStatus" aria-live="polite">데이터를 불러오는 중입니다.</p>
         <div class="etf-catalog-layout">
           <div class="etf-catalog-list">
-            <div class="etf-catalog-table-wrap"><table><thead><tr><th>ETF</th><th>3개월</th><th>자산군·섹터</th><th>상세</th></tr></thead><tbody id="etfCatalogRows"></tbody></table></div>
+            <div class="etf-catalog-table-wrap"><table><thead><tr><th>ETF</th><th id="etfCatalogReturnHeader">3개월</th><th>자산군·섹터</th><th>상세</th></tr></thead><tbody id="etfCatalogRows"></tbody></table></div>
             <div class="etf-catalog-pages"><button type="button" id="etfCatalogPrevious">이전</button><span id="etfCatalogPage"></span><button type="button" id="etfCatalogNext">다음</button></div>
           </div>
           <aside class="etf-catalog-detail" id="etfCatalogDetail" aria-live="polite"><p>왼쪽 목록에서 <b>상세</b>를 선택해 상위 편입종목과 비중을 확인하세요.</p></aside>
@@ -2985,11 +3001,27 @@
         const previous = document.getElementById("etfCatalogPrevious");
         const next = document.getElementById("etfCatalogNext");
         const closeButton = modal.querySelector(".glossary-modal__close");
+        const periodModeSelect = document.getElementById("etfCatalogPeriodMode");
+        const periodCustomWrap = document.getElementById("etfCatalogPeriodCustom");
+        const periodStartInput = document.getElementById("etfCatalogPeriodStart");
+        const periodEndInput = document.getElementById("etfCatalogPeriodEnd");
+        const periodApplyBtn = document.getElementById("etfCatalogPeriodApply");
+        const periodNote = document.getElementById("etfCatalogPeriodNote");
+        const returnHeader = document.getElementById("etfCatalogReturnHeader");
         const pageSize = 12;
         let source = null;
         let page = 0;
+        let periodMode = "default";
+        let periodRange = null; // { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }
+        let periodGen = 0;
+        // "code:start:end" -> { status: 'loading'|'done'|'error'|'needs_older', pct, earliestStoredDate }
+        const periodCache = new Map();
+        const extending = new Set(); // codes currently mid-"1년 전 가져오기" request
         const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
         const percentage = (value) => `${Number(value || 0) >= 0 ? "+" : ""}${Number(value || 0).toFixed(2)}%`;
+        const isoDate = (d) => d.toISOString().slice(0, 10);
+        const presetMonths = { "1m": 1, "3m": 3, "6m": 6, "1y": 12 };
+        const presetLabels = { "1m": "1개월", "3m": "3개월", "6m": "6개월", "1y": "1년" };
         const filtered = () => {
           if (!source) return [];
           const keyword = search.value.trim().toLowerCase();
@@ -2999,13 +3031,84 @@
             && (!keyword || `${item.name} ${item.theme} ${item.assetClass}`.toLowerCase().includes(keyword)),
           );
         };
+        const returnHeaderLabel = () => {
+          if (periodMode === "default") return "3개월";
+          if (periodMode === "custom") return periodRange ? `${periodRange.start}~${periodRange.end}` : "기간 설정";
+          return presetLabels[periodMode];
+        };
+        const periodCacheKey = (code) => `${code}:${periodRange.start}:${periodRange.end}`;
+        const ensurePeriodFetch = (code, gen) => {
+          const cacheKey = periodCacheKey(code);
+          if (periodCache.has(cacheKey)) return periodCache.get(cacheKey);
+          const entry = { status: "loading", pct: null, earliestStoredDate: null };
+          periodCache.set(cacheKey, entry);
+          fetch(`/market/period-return?ticker=${encodeURIComponent(code)}&start=${periodRange.start}&end=${periodRange.end}`)
+            .then((res) => { if (!res.ok) throw new Error("period-return failed"); return res.json(); })
+            .then((data) => {
+              if (data.available) {
+                entry.status = "done";
+                entry.pct = data.return_pct;
+              } else if (data.reason === "needs_older_history" || data.reason === "no_data") {
+                // Either PostgreSQL has nothing yet for this ticker, or not far enough back —
+                // both are fixed the same way: fetch it once via the extend endpoint.
+                entry.status = "needs_older";
+                entry.earliestStoredDate = data.earliest_stored_date || null;
+              } else {
+                entry.status = "error";
+              }
+            })
+            .catch(() => { entry.status = "error"; })
+            .finally(() => { if (gen === periodGen && !modal.hidden) render(); });
+          return entry;
+        };
+        const extendHistory = (code) => {
+          if (extending.has(code)) return;
+          extending.add(code);
+          const priorEarliest = periodCache.get(periodCacheKey(code))?.earliestStoredDate || null;
+          render();
+          fetch(`/market/period-return/extend?ticker=${encodeURIComponent(code)}&start=${periodRange.start}`, { method: "POST" })
+            .then((res) => { if (!res.ok) throw new Error("extend failed"); return res.json(); })
+            .then((data) => {
+              periodCache.delete(periodCacheKey(code));
+              if (priorEarliest && data.earliest_date && data.earliest_date >= priorEarliest) {
+                // Yahoo Finance had no bars before what was already stored — this ETF simply
+                // doesn't go back that far, so avoid offering the same button forever.
+                periodCache.set(periodCacheKey(code), { status: "no_older_data", pct: null, earliestStoredDate: data.earliest_date });
+              }
+            })
+            .catch(() => {
+              periodCache.set(periodCacheKey(code), { status: "error", pct: null, earliestStoredDate: null });
+            })
+            .finally(() => { extending.delete(code); render(); });
+        };
+        // Returns { text, cls, action } for a table cell or detail line, given the active period mode.
+        // action, when set, is the code to wire an "1년 전 가져오기" button to instead of plain text.
+        const returnDisplay = (item) => {
+          if (periodMode === "default") {
+            return { text: percentage(item.return3m), cls: Number(item.return3m) >= 0 ? "positive" : "negative" };
+          }
+          if (!periodRange) return { text: "—", cls: "" };
+          if (extending.has(item.code)) return { text: "가져오는 중…", cls: "" };
+          const entry = ensurePeriodFetch(item.code, periodGen);
+          if (entry.status === "loading") return { text: "조회 중…", cls: "" };
+          if (entry.status === "needs_older") return { text: entry.earliestStoredDate ? "1년 전 가져오기" : "시세 가져오기", cls: "", action: item.code };
+          if (entry.status === "no_older_data") return { text: "상장일 이전 데이터 없음", cls: "" };
+          if (entry.status === "error") return { text: "조회 실패", cls: "" };
+          return { text: percentage(entry.pct), cls: entry.pct >= 0 ? "positive" : "negative" };
+        };
         const showDetail = (code) => {
           const item = source?.items.find((entry) => entry.code === code);
           if (!item) return;
           const holdings = item.topHoldings?.length
             ? `<ol>${item.topHoldings.map((holding) => `<li><span>${esc(holding.name)}</span><b>${Number(holding.weight).toFixed(2)}%</b></li>`).join("")}</ol>`
             : "<p class=\"etf-catalog-empty\">이 ETF는 조회 시점에 개별 편입종목 내역이 없었습니다. 현금성·파생형 상품일 수 있으므로 KRX PDF와 운용사 자료를 확인하세요.</p>";
-          detail.innerHTML = `<span class="etf-catalog-detail-kicker">${esc(item.brand)} · ${esc(item.manager)}</span><h3>${esc(item.name)}</h3><dl><div><dt>최근 3개월 수익률</dt><dd class="${Number(item.return3m) >= 0 ? "positive" : "negative"}">${percentage(item.return3m)}</dd></div><div><dt>분류</dt><dd>${esc(item.assetClass)} · ${esc(item.theme)}</dd></div><div><dt>편입 기준일</dt><dd>${esc(item.holdingsAsOf || "확인 필요")}</dd></div></dl><h4>상위 편입종목·비중</h4>${holdings}<p><a href="${esc(item.managerSite)}" target="_blank" rel="noopener noreferrer">운용사 상품 정보 ↗</a> <a href="${esc(item.detailUrl)}" target="_blank" rel="noopener noreferrer">시세 상세 ↗</a></p>`;
+          const ret = returnDisplay(item);
+          const returnLabel = periodMode === "default" ? "최근 3개월 수익률" : `선택 기간(${returnHeaderLabel()}) 수익률`;
+          const returnValueHtml = ret.action
+            ? `<button type="button" class="etf-catalog-extend-btn" data-etf-extend="${esc(ret.action)}">${esc(ret.text)}</button>`
+            : esc(ret.text);
+          detail.innerHTML = `<span class="etf-catalog-detail-kicker">${esc(item.brand)} · ${esc(item.manager)}</span><h3>${esc(item.name)}</h3><dl><div><dt>${returnLabel}</dt><dd class="${ret.cls}">${returnValueHtml}</dd></div><div><dt>분류</dt><dd>${esc(item.assetClass)} · ${esc(item.theme)}</dd></div><div><dt>편입 기준일</dt><dd>${esc(item.holdingsAsOf || "확인 필요")}</dd></div></dl><h4>상위 편입종목·비중</h4>${holdings}<p><a href="${esc(item.managerSite)}" target="_blank" rel="noopener noreferrer">운용사 상품 정보 ↗</a> <a href="${esc(item.detailUrl)}" target="_blank" rel="noopener noreferrer">시세 상세 ↗</a></p>`;
+          detail.dataset.etfDetailCode = code;
         };
         const render = () => {
           const items = filtered();
@@ -3013,10 +3116,18 @@
           page = Math.min(page, maxPage);
           const visible = items.slice(page * pageSize, page * pageSize + pageSize);
           status.textContent = `총 ${items.length.toLocaleString("ko-KR")}개 ETF · ${source.updatedAt} 수집 기준`;
-          rows.innerHTML = visible.length ? visible.map((item) => `<tr><td><b>${esc(item.name)}</b><small>${esc(item.code)} · ${esc(item.manager)}</small></td><td class="${Number(item.return3m) >= 0 ? "positive" : "negative"}">${percentage(item.return3m)}</td><td>${esc(item.assetClass)}<small>${esc(item.theme)}</small></td><td><button type="button" data-etf-detail="${esc(item.code)}">보기</button></td></tr>`).join("") : "<tr><td colspan=\"4\" class=\"etf-catalog-empty\">조건에 맞는 ETF가 없습니다.</td></tr>";
+          returnHeader.textContent = returnHeaderLabel();
+          rows.innerHTML = visible.length ? visible.map((item) => {
+            const ret = returnDisplay(item);
+            const cell = ret.action
+              ? `<button type="button" class="etf-catalog-extend-btn" data-etf-extend="${esc(ret.action)}">${esc(ret.text)}</button>`
+              : esc(ret.text);
+            return `<tr><td><b>${esc(item.name)}</b><small>${esc(item.code)} · ${esc(item.manager)}</small></td><td class="${ret.cls}">${cell}</td><td>${esc(item.assetClass)}<small>${esc(item.theme)}</small></td><td><button type="button" data-etf-detail="${esc(item.code)}">보기</button></td></tr>`;
+          }).join("") : "<tr><td colspan=\"4\" class=\"etf-catalog-empty\">조건에 맞는 ETF가 없습니다.</td></tr>";
           pageLabel.textContent = `${maxPage + 1 ? page + 1 : 0} / ${maxPage + 1}`;
           previous.disabled = page === 0;
           next.disabled = page >= maxPage;
+          if (detail.dataset.etfDetailCode && periodMode !== "default") showDetail(detail.dataset.etfDetailCode);
         };
         const load = async () => {
           if (source) return;
@@ -3029,13 +3140,63 @@
             status.textContent = "ETF 데이터를 불러오지 못했습니다. 잠시 후 다시 시도하세요.";
           }
         };
+        const applyPeriod = (mode, range) => {
+          periodMode = mode;
+          periodRange = range;
+          periodGen += 1;
+          page = 0;
+          if (source) render();
+        };
+        periodModeSelect.addEventListener("change", () => {
+          const mode = periodModeSelect.value;
+          if (mode === "custom") {
+            periodCustomWrap.hidden = false;
+            const today = new Date();
+            const start = new Date(today);
+            start.setMonth(start.getMonth() - 3);
+            if (!periodStartInput.value) periodStartInput.value = isoDate(start);
+            if (!periodEndInput.value) periodEndInput.value = isoDate(today);
+            periodNote.textContent = "시작일·종료일을 고르고 “적용”을 눌러 PostgreSQL에 저장된 시세로 수익률을 계산하세요. 1년보다 이전 날짜를 고르면 해당 ETF에 “1년 전 가져오기” 버튼이 나타납니다.";
+            return;
+          }
+          periodCustomWrap.hidden = true;
+          if (mode === "default") {
+            periodNote.textContent = "기본값은 목록의 저장된 3개월 수익률이라 즉시 표시됩니다.";
+            applyPeriod("default", null);
+            return;
+          }
+          const end = new Date();
+          const start = new Date(end);
+          start.setMonth(start.getMonth() - presetMonths[mode]);
+          periodNote.textContent = `화면에 보이는 ETF만 PostgreSQL에 저장된 최근 1년치 시세로 ${presetLabels[mode]} 수익률을 계산합니다.`;
+          applyPeriod(mode, { start: isoDate(start), end: isoDate(end) });
+        });
+        periodApplyBtn.addEventListener("click", () => {
+          const startValue = periodStartInput.value;
+          const endValue = periodEndInput.value;
+          if (!startValue || !endValue || startValue >= endValue) {
+            periodNote.textContent = "시작일은 종료일보다 앞서야 합니다. 날짜를 다시 확인하세요.";
+            return;
+          }
+          periodNote.textContent = "화면에 보이는 ETF만 PostgreSQL에 저장된 시세로 선택한 기간의 수익률을 계산합니다. 1년보다 이전 시작일은 해당 ETF의 “1년 전 가져오기” 버튼을 눌러야 조회됩니다.";
+          applyPeriod("custom", { start: startValue, end: endValue });
+        });
         const open = async () => { modal.hidden = false; closeButton?.focus(); await load(); };
         const close = () => { if (!modal.hidden) { modal.hidden = true; trigger.focus(); } };
         [brand, asset].forEach((field) => field.addEventListener("change", () => { page = 0; render(); }));
         search.addEventListener("input", () => { page = 0; render(); });
         previous.addEventListener("click", () => { page -= 1; render(); });
         next.addEventListener("click", () => { page += 1; render(); });
-        rows.addEventListener("click", (event) => { const button = event.target.closest("[data-etf-detail]"); if (button) showDetail(button.dataset.etfDetail); });
+        rows.addEventListener("click", (event) => {
+          const extendBtn = event.target.closest("[data-etf-extend]");
+          if (extendBtn) { extendHistory(extendBtn.dataset.etfExtend); return; }
+          const detailBtn = event.target.closest("[data-etf-detail]");
+          if (detailBtn) showDetail(detailBtn.dataset.etfDetail);
+        });
+        detail.addEventListener("click", (event) => {
+          const extendBtn = event.target.closest("[data-etf-extend]");
+          if (extendBtn) extendHistory(extendBtn.dataset.etfExtend);
+        });
         trigger.addEventListener("click", open);
         modal.querySelectorAll("[data-etf-catalog-close]").forEach((element) => element.addEventListener("click", close));
         document.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
