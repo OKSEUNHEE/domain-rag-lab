@@ -4,6 +4,7 @@
     const term = item.querySelector('dt');
     const description = item.querySelector('dd');
     if (!term || !description) return null;
+    const richDetailTemplate = description.querySelector(':scope > template.glossary-rich-detail');
     const clone = term.cloneNode(true);
     clone.querySelector('small')?.remove();
     return {
@@ -12,6 +13,9 @@
       detail: [...description.querySelectorAll(':scope > p')].map((paragraph) => clean(paragraph.textContent)).filter(Boolean).length
         ? [...description.querySelectorAll(':scope > p')].map((paragraph) => clean(paragraph.textContent)).filter(Boolean)
         : [clean(description.textContent)],
+      richDetail: richDetailTemplate
+        ? [...richDetailTemplate.content.childNodes].map((node) => node.cloneNode(true))
+        : null,
       infographic: description.querySelector('.glossary-infographic')?.cloneNode(true) || null,
       item,
       manualOnly: item.hasAttribute('data-glossary-manual-only'),
@@ -29,7 +33,7 @@
     { title: '펀드', aliases: 'Fund', detail: ['여러 투자자의 자금을 모아 주식·채권 등 자산에 투자하는 집합투자 상품입니다. 상품에 따라 원금과 수익률이 보장되지 않으며, 환매 방식과 비용이 다릅니다.'] },
     { title: '차익거래', aliases: 'Arbitrage', detail: ['경제적으로 비슷한 대상 사이의 가격 차이를 이용해 위험을 낮춘 수익 기회를 찾는 거래입니다. 세금·수수료·차입·체결 비용과 시장 제약 때문에 무위험 수익이 보장되지는 않습니다.'] },
     { title: '공매도', aliases: 'Short Selling', detail: ['보유하지 않은 증권을 빌려 먼저 매도한 뒤, 나중에 사서 갚는 거래입니다. 가격 하락 시 이익을 기대할 수 있지만 가격이 오르면 손실이 커질 수 있습니다.'] },
-    { title: '만기', aliases: 'Maturity · Expiration', detail: ['계약이 끝나고 정산 또는 권리 행사가 이루어지는 마지막 날입니다. 선물·옵션에서는 상품마다 만기와 정산 방식이 미리 정해져 있습니다.'] },
+    { title: '만기', aliases: 'Maturity · Expiration', detail: ['금융상품이나 계약에서 약정한 기간이 끝나 원금·이자 지급, 상환, 정산 또는 권리 행사가 이루어지는 시점입니다. 상품마다 만기일과 만기 때 처리 방식이 미리 정해져 있습니다.', '채권은 보통 만기에 발행자가 원금을 상환하고, 예금·적금은 약정 기간이 끝나 만기 이율을 적용해 원리금을 지급합니다. 약속어음·환어음에서는 만기가 지급을 청구할 수 있는 기한 또는 지급일을 뜻합니다. 반면 만기 전 해지·매도·할인은 약정한 만기 조건과 다른 금리·가격 또는 비용이 적용될 수 있습니다.', '선물·옵션에서는 계약이 끝나 현금결제 또는 실물인도가 이루어지거나, 옵션의 권리 행사가 가능한 마지막 시점을 뜻합니다. 같은 ‘만기’라도 상품에 따라 자동 연장 여부, 휴일 처리, 중도상환·중도해지 조건, 결제일이 다를 수 있으므로 약관과 상품설명서를 확인해야 합니다.'] },
     { title: '옵션', aliases: 'Option', detail: ['정해진 기간 또는 날짜에 기초자산을 약정 가격으로 사고팔 수 있는 권리를 거래하는 계약입니다. 매수자는 프리미엄을 내고 권리를 얻고, 매도자는 행사될 때 이행 의무를 집니다.'] },
     { title: '인버스', aliases: 'Inverse', detail: ['기초지수와 반대 방향의 일간 수익률을 목표로 설계한 상품 또는 전략입니다. 장기 누적 수익률은 기초지수 수익률의 단순한 반대가 아닐 수 있습니다.'] },
     { title: 'ETN', aliases: 'Exchange-Traded Note', detail: ['증권회사가 발행하고 거래소에 상장한 파생결합증권입니다. 지수 수익률을 추종하도록 설계될 수 있으나 발행사의 신용위험도 함께 고려해야 합니다.'] },
@@ -79,11 +83,13 @@
     title.textContent = entry.title;
     aliases.textContent = entry.aliases;
     aliases.hidden = !entry.aliases;
-    detail.replaceChildren(...entry.detail.map((paragraph) => {
-      const element = document.createElement('p');
-      element.textContent = paragraph;
-      return element;
-    }));
+    detail.replaceChildren(...(entry.richDetail
+      ? entry.richDetail.map((node) => node.cloneNode(true))
+      : entry.detail.map((paragraph) => {
+        const element = document.createElement('p');
+        element.textContent = paragraph;
+        return element;
+      })));
     if (entry.infographic) detail.append(entry.infographic.cloneNode(true));
     modal.hidden = false;
     closeButton.focus();
