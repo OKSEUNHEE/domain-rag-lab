@@ -1976,6 +1976,33 @@
       </section>
     </div>
 
+    <div class="glossary-modal bank-rate-sim-modal" id="bankRateSimModal" hidden>
+      <div class="glossary-modal__backdrop" data-bank-rate-sim-close></div>
+      <section class="glossary-modal__dialog lifecycle-savings-dialog" role="dialog" aria-modal="true" aria-labelledby="bankRateSimTitle">
+        <button class="glossary-modal__close" type="button" aria-label="닫기" data-bank-rate-sim-close>×</button>
+        <h2 id="bankRateSimTitle">최근 예금금리 기준 시뮬레이션</h2>
+        <p class="lifecycle-savings-intro">교육용 단순 계산입니다. 은행이 실제로 쓰는 단리 방식으로 계산합니다 — 정기예금은 예치 원금 전체에 예치 기간만큼, 정기적금은 매달 낸 돈이 만기까지 남은 개월 수만큼만 이자가 붙습니다. 이자소득세 15.4%를 뺀 세후 수령액도 함께 보여줍니다. 기본값 연 3.2%는 한국은행의 2026년 7월 신규취급액 기준 예금은행 저축성수신금리 연 3.21%를 반올림한 값이며, 실제 상품 금리·우대조건은 다를 수 있습니다.</p>
+        <div class="lifecycle-savings-layout">
+          <div class="lifecycle-savings-controls">
+            <label>상품<select id="bankRateProduct"><option value="deposit">정기예금 · 목돈 예치</option><option value="saving">정기적금 · 매월 납입</option></select></label>
+            <label id="bankRatePrincipalField">예치금액 (원)<input id="bankRatePrincipal" type="number" min="0" step="100000" value="10000000" /></label>
+            <label id="bankRateMonthlyField" hidden>월 납입액 (원)<input id="bankRateMonthly" type="number" min="0" step="10000" value="300000" /></label>
+            <label>연 금리 <output id="bankRateValue">3.2%</output><input id="bankRateInput" type="range" min="0" max="6" step="0.05" value="3.2" /></label>
+            <label>기간 <output id="bankRateYearsValue">1년</output><input id="bankRateYears" type="range" min="1" max="5" step="1" value="1" /></label>
+          </div>
+          <div class="lifecycle-savings-main bank-rate-sim-main">
+            <div class="lifecycle-savings-summary" aria-live="polite">
+              <article><span>총 납입 원금</span><strong id="bankRateContributions">—</strong></article>
+              <article><span>세전 이자</span><strong id="bankRateInterestGross">—</strong></article>
+              <article><span>이자소득세(15.4%)</span><strong id="bankRateTax">—</strong></article>
+              <article><span>만기 세후 수령액</span><strong id="bankRateFinal">—</strong></article>
+            </div>
+            <section class="lifecycle-savings-guide"><strong>계산 방법</strong><p id="bankRateGuide"></p></section>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <div class="glossary-modal inav-sim-modal" id="inavSimModal" hidden>
       <div class="glossary-modal__backdrop" data-inav-sim-close></div>
       <section
@@ -2701,8 +2728,70 @@
         [stage, product].forEach((input) => input.addEventListener("change", update));
         [principal, rate, years, monthly].forEach((input) => input.addEventListener("input", render));
         trigger.addEventListener("click", open);
-        document.getElementById("bankRateSimTrigger")?.addEventListener("click", () => trigger.click());
         modal.querySelectorAll("[data-lifecycle-savings-close]").forEach((element) => element.addEventListener("click", close));
+        document.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
+      })();
+    </script>
+    <script>
+      (() => {
+        const modal = document.getElementById("bankRateSimModal");
+        const trigger = document.getElementById("bankRateSimTrigger");
+        if (!modal || !trigger) return;
+        const product = document.getElementById("bankRateProduct");
+        const principal = document.getElementById("bankRatePrincipal");
+        const principalField = document.getElementById("bankRatePrincipalField");
+        const monthly = document.getElementById("bankRateMonthly");
+        const monthlyField = document.getElementById("bankRateMonthlyField");
+        const rate = document.getElementById("bankRateInput");
+        const rateValue = document.getElementById("bankRateValue");
+        const years = document.getElementById("bankRateYears");
+        const yearsValue = document.getElementById("bankRateYearsValue");
+        const contributions = document.getElementById("bankRateContributions");
+        const interestGross = document.getElementById("bankRateInterestGross");
+        const tax = document.getElementById("bankRateTax");
+        const finalAmount = document.getElementById("bankRateFinal");
+        const guide = document.getElementById("bankRateGuide");
+        const closeButton = modal.querySelector(".glossary-modal__close");
+        const won = (value) => `${Math.round(value).toLocaleString("ko-KR")}원`;
+        const TAX_RATE = 0.154;
+        const configure = () => {
+          const isSaving = product.value === "saving";
+          principalField.hidden = isSaving;
+          monthlyField.hidden = !isSaving;
+        };
+        const render = () => {
+          const annualRate = Number(rate.value) / 100;
+          const term = Number(years.value);
+          const months = term * 12;
+          const isSaving = product.value === "saving";
+          let paidIn, grossInterest;
+          if (isSaving) {
+            const deposit = Math.max(0, Number(monthly.value) || 0);
+            paidIn = deposit * months;
+            grossInterest = (deposit * annualRate * (months * (months + 1))) / (2 * 12);
+          } else {
+            const start = Math.max(0, Number(principal.value) || 0);
+            paidIn = start;
+            grossInterest = start * annualRate * term;
+          }
+          const taxAmount = grossInterest * TAX_RATE;
+          rateValue.textContent = `${(annualRate * 100).toFixed(2)}%`;
+          yearsValue.textContent = `${term}년`;
+          contributions.textContent = won(paidIn);
+          interestGross.textContent = won(grossInterest);
+          tax.textContent = `-${won(taxAmount)}`;
+          finalAmount.textContent = won(paidIn + grossInterest - taxAmount);
+          guide.textContent = isSaving
+            ? `정기적금은 매달 낸 돈이 만기까지 남은 개월 수만큼만 이자가 붙는 단리 방식입니다. 월 ${won(Number(monthly.value) || 0)}씩 ${months}개월 납입, 연 ${(annualRate * 100).toFixed(2)}% 기준입니다.`
+            : `정기예금은 예치한 원금 전체에 예치 기간 동안 단리로 이자가 붙습니다. ${won(Number(principal.value) || 0)}을 ${term}년(${months}개월) 동안 연 ${(annualRate * 100).toFixed(2)}%로 맡긴 가정입니다.`;
+        };
+        const update = () => { configure(); render(); };
+        const open = () => { modal.hidden = false; update(); closeButton?.focus(); };
+        const close = () => { if (!modal.hidden) { modal.hidden = true; trigger.focus(); } };
+        product.addEventListener("change", update);
+        [principal, monthly, rate, years].forEach((input) => input.addEventListener("input", render));
+        trigger.addEventListener("click", open);
+        modal.querySelectorAll("[data-bank-rate-sim-close]").forEach((element) => element.addEventListener("click", close));
         document.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
       })();
     </script>
