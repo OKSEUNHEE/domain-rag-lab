@@ -90,6 +90,8 @@ services:
 
   streamlit:
     image: 369481142109.dkr.ecr.ap-northeast-2.amazonaws.com/domain-rag-lab-streamlit:latest
+    volumes:
+      - ./streamlit_app.py:/app/streamlit_app.py:ro
     ports:
       - "8290:8501"
     env_file:
