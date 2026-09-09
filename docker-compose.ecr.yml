@@ -1,14 +1,14 @@
-name: domain-rag-lab
+name: domain-rag-lab-ecr
 
 services:
   postgres:
-    image: 369481142109.dkr.ecr.ap-northeast-2.amazonaws.com/domain-rag-lab/postgres:latest
-    env_file:
-      - ${APP_ENV_FILE:-.env.prod}
+    image: 369481142109.dkr.ecr.ap-northeast-2.amazonaws.com/domain-rag-lab-postgres:latest
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ragdb}
       POSTGRES_USER: ${POSTGRES_USER:-raguser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragpass}
+    ports:
+      - "15433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/01-enable-pgvector.sql:ro
@@ -20,7 +20,9 @@ services:
     restart: unless-stopped
 
   redis:
-    image: 369481142109.dkr.ecr.ap-northeast-2.amazonaws.com/domain-rag-lab/redis:latest
+    image: 369481142109.dkr.ecr.ap-northeast-2.amazonaws.com/domain-rag-lab-redis:latest
+    ports:
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -31,7 +33,10 @@ services:
     restart: unless-stopped
 
   qdrant:
-    image: 369481142109.dkr.ecr.ap-northeast-2.amazonaws.com/domain-rag-lab/qdrant:latest
+    image: 369481142109.dkr.ecr.ap-northeast-2.amazonaws.com/domain-rag-lab-qdrant:latest
+    ports:
+      - "6335:6333"
+      - "6336:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
@@ -42,11 +47,15 @@ services:
     restart: unless-stopped
 
   api:
-    image: 369481142109.dkr.ecr.ap-northeast-2.amazonaws.com/domain-rag-lab/api:latest
-    build: .
+    image: 369481142109.dkr.ecr.ap-northeast-2.amazonaws.com/domain-rag-lab-api:latest
+    ports:
+      - "8300:8000"
     env_file:
-      - ${APP_ENV_FILE:-.env.prod}
+      - ${APP_ENV_FILE:-.env.local}
     environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ragdb}
+      POSTGRES_USER: ${POSTGRES_USER:-raguser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragpass}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       REDIS_HOST: redis
@@ -61,9 +70,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      # Keep the image-bundled learning samples read-only in /app/data while
-      # retaining user uploads across image rebuilds and container replacement.
-      - app_uploads:/app/data/uploads
+      - ./data:/app/data
       - ${LEAN_SSH_KEY_HOST_PATH:-/dev/null}:${LEAN_SSH_KEY_PATH:-/run/secrets/lean.pem}:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     depends_on:
@@ -78,27 +85,24 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
-      start_period: 30s
+      start_period: 20s
     restart: unless-stopped
 
-  caddy:
-    image: caddy:2.8-alpine
+  streamlit:
+    image: 369481142109.dkr.ecr.ap-northeast-2.amazonaws.com/domain-rag-lab-streamlit:latest
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - "8290:8501"
+    env_file:
+      - ${APP_ENV_FILE:-.env.local}
+    environment:
+      API_BASE_URL: http://api:8000
     depends_on:
       api:
         condition: service_healthy
+    command: streamlit run /app/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
     restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
   qdrant_data:
-  caddy_data:
-  caddy_config:
-  app_uploads:

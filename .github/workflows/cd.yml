@@ -1,4 +1,4 @@
-name: CD — Deploy to EC2
+name: CD — ECR & EC2 Deployment
 
 on:
   push:
@@ -6,12 +6,12 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: domain-rag-production
+  group: domain-rag-deploy
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Sync and deploy production stack
+    name: Build, Push to ECR and Deploy to EC2
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,47 +20,67 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure SSH key
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-northeast-2' }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Images to Amazon ECR
         env:
-          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > ~/.ssh/domain-rag-deploy.pem
-          chmod 600 ~/.ssh/domain-rag-deploy.pem
+          echo "Building and pushing API image to ECR..."
+          docker build -t $REGISTRY/domain-rag-lab-api:latest .
+          docker push $REGISTRY/domain-rag-lab-api:latest
+
+          echo "Building and pushing Streamlit image to ECR..."
+          docker build -t $REGISTRY/domain-rag-lab-streamlit:latest .
+          docker push $REGISTRY/domain-rag-lab-streamlit:latest
+
+      - name: Configure SSH Key
+        env:
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY || secrets.TEST_EC2_SSH_PRIVATE_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST || secrets.TEST_EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
 
-      - name: Synchronize application files
+      - name: Copy docker-compose.ecr.yml to EC2
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
+          EC2_HOST: ${{ secrets.EC2_HOST || secrets.TEST_EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER || secrets.TEST_EC2_USER }}
         run: |
-          rsync -az --delete \
-            --exclude '.env' \
-            --exclude '.env.*' \
-            --exclude '.git' \
-            --exclude '.claude' \
-            --exclude '__pycache__' \
-            --exclude '*.pyc' \
-            --exclude '*.pem' \
-            -e 'ssh -i ~/.ssh/domain-rag-deploy.pem' \
-            ./ "$EC2_USER@$EC2_HOST:$EC2_APP_DIR/"
+          scp -i ~/.ssh/id_rsa docker-compose.ecr.yml $EC2_USER@$EC2_HOST:/home/$EC2_USER/domain-rag-lab/docker-compose.ecr.yml
 
-      - name: Build and restart services
+      - name: Pull ECR Images and Restart Stack on EC2
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
+          EC2_HOST: ${{ secrets.EC2_HOST || secrets.TEST_EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER || secrets.TEST_EC2_USER }}
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'ap-northeast-2' }}
         run: |
-          ssh -i ~/.ssh/domain-rag-deploy.pem "$EC2_USER@$EC2_HOST" <<EOF
+          ssh -i ~/.ssh/id_rsa $EC2_USER@$EC2_HOST <<EOF
           set -euo pipefail
-          cd "$EC2_APP_DIR"
-          if [ ! -f .env.prod ]; then
-            echo "ERROR: $EC2_APP_DIR/.env.prod is missing. Restore the production environment file on EC2 before deploying." >&2
-            exit 1
-          fi
-          sudo docker compose -p domain-rag-lab --env-file .env.prod -f docker-compose.prod.yml up --build -d
-          sudo docker compose -p domain-rag-lab --env-file .env.prod -f docker-compose.prod.yml ps
-          curl --fail --retry 12 --retry-delay 5 http://localhost/health
+          cd /home/$EC2_USER/domain-rag-lab
+          
+          echo "Logging into ECR on EC2..."
+          aws ecr get-login-password --region $AWS_REGION | sudo docker login --username AWS --password-stdin $REGISTRY
+          
+          echo "Pulling latest ECR images..."
+          sudo docker compose -f docker-compose.ecr.yml --env-file .env.local pull
+          
+          echo "Restarting containers..."
+          sudo docker compose -f docker-compose.ecr.yml --env-file .env.local up -d
+          sudo docker compose -f docker-compose.ecr.yml --env-file .env.local ps
+          
+          echo "Running health check..."
+          curl --fail --retry 10 --retry-delay 3 http://127.0.0.1:8300/health
           EOF
