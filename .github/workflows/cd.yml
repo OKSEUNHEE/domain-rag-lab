@@ -74,12 +74,18 @@ jobs:
           echo "Logging into ECR on EC2..."
           aws ecr get-login-password --region $AWS_REGION | sudo docker login --username AWS --password-stdin $REGISTRY
           
+          echo "Cleaning up disk space before pull..."
+          sudo docker image prune -f || true
+          
           echo "Pulling latest ECR images..."
           sudo docker compose -f docker-compose.ecr.yml --env-file .env.local pull
           
           echo "Restarting containers..."
           sudo docker compose -f docker-compose.ecr.yml --env-file .env.local up -d
           sudo docker compose -f docker-compose.ecr.yml --env-file .env.local ps
+          
+          echo "Cleaning up dangling images..."
+          sudo docker image prune -f || true
           
           echo "Running health check..."
           curl --fail --retry 10 --retry-delay 3 http://127.0.0.1:8300/health
